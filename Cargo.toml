@@ -4,7 +4,7 @@ version = "0.1.1"
 edition = "2021"
 license = "BUSL-1.1"
 description = "graph database built for teams who expect highly performant, advanced analytical insights"
-authors = ["Tyler Neely <tylerneely@gmail.com>", "Memgraph Core Team <core@memgraph.io>"]
+authors = ["Memgraph Contributors <tech@memgraph.com>"]
 categories = [ "database-implementations" ]
 keywords = ["db", "database", "graph", "distributed", "neo4j"]
 
