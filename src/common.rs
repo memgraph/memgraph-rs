@@ -13,11 +13,64 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::*;
+
+pub type RsmId = u64;
 pub type SchemaId = u64;
 pub type EdgeLabelId = u64;
 pub type VertexLabelId = u64;
 pub type EdgePropertyId = u64;
 pub type VertexPropertyId = u64;
+
+pub struct Timeout;
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Request {
+    Coordinator(CoordinatorReq),
+    Shard(ShardReq),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum CoordinatorReq {
+    CoordinatorAppend(AppendReq<Coordinator>),
+    CoordinatorRead(ReadReq<Coordinator>),
+    CoordinatorWrite(WriteReq<Coordinator>),
+    Vote(VoteReq),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ShardReq {
+    ShardAppend(AppendReq<Shard>),
+    ShardRead(ReadReq<Shard>),
+    ShardWrite(WriteReq<Shard>),
+    Vote(VoteReq),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Response {
+    CoordinatorAppend(AppendRes<Coordinator>),
+    CoordinatorRead(ReadRes<Coordinator>),
+    CoordinatorWrite(WriteRes<Coordinator>),
+    ShardAppend(AppendRes<Shard>),
+    ShardRead(ReadRes<Shard>),
+    ShardWrite(WriteRes<Shard>),
+    Vote(VoteRes),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Message {
+    CoordinatorReq(CoordinatorReq),
+    ShardReq(ShardReq),
+    Response(Response),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Envelope {
+    pub from: Address,
+    pub to: Address,
+    pub message: Message,
+    pub request_id: Option<u64>,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Hlc {

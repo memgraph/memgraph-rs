@@ -13,13 +13,15 @@
 
 mod common;
 mod coordinator;
+mod io;
+mod machine_manager;
 mod metadata;
-mod net;
 mod rsm;
 mod shard;
 
 use common::*;
 use coordinator::*;
+use io::Io;
 use metadata::*;
 use rsm::*;
 use shard::*;

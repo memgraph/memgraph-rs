@@ -15,6 +15,8 @@ use std::path::Path;
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
+use crate::Io;
+
 pub trait Rsm: Sized + Serialize + DeserializeOwned {
     type ReadReq: Serialize + DeserializeOwned;
     type ReadRes: Serialize + DeserializeOwned;
@@ -74,7 +76,43 @@ pub struct AppendRes<R: Rsm> {
     pd: PhantomData<R>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone)]
 pub struct Replica<R: Rsm> {
     state: R,
+    io: Io,
+}
+
+impl<R: Rsm> Replica<R> {
+    fn cron(&mut self) {
+        // return early unless leader
+
+        // handle timeouts
+
+        // send Appends
+        todo!()
+    }
+
+    fn handle_read(&self, req: ReadReq<R>) -> R::ReadRes {
+        todo!()
+    }
+
+    fn handle_write(&mut self, req: WriteReq<R>) {
+        todo!()
+    }
+
+    fn handle_append_req(&mut self, req: AppendReq<R>) {
+        todo!()
+    }
+
+    fn handle_append_res(&mut self, req: AppendRes<R>) {
+        todo!()
+    }
+
+    fn handle_vote_req(&mut self, req: VoteReq) {
+        todo!()
+    }
+
+    fn handle_vote_res(&mut self, req: VoteRes) {
+        todo!()
+    }
 }
