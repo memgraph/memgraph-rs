@@ -1,25 +1,23 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::num::NonZeroU64;
-use std::ops::Bound;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-type PropertyId = u64;
-type EdgeLabelId = u64;
-type VertexLabelId = u64;
-type EdgePropertyId = u64;
-type VertexPropertyId = u64;
+pub type SchemaId = u64;
+pub type EdgeLabelId = u64;
+pub type VertexLabelId = u64;
+pub type EdgePropertyId = u64;
+pub type VertexPropertyId = u64;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Hlc {
-    logical: u64,
-    coordinator_wall: std::time::SystemTime,
+    pub logical: u64,
+    pub coordinator_wall: std::time::SystemTime,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VersionedKey {
-    key: Key,
-    version: Hlc,
+    pub key: Key,
+    pub version: Hlc,
 }
 
 // Key is a unified way of keying all data
@@ -66,10 +64,19 @@ pub enum SchemaPart {
     Time,
 }
 
+pub type Schema = Vec<SchemaPart>;
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Value {
     Int(i64),
-    String(String),
+    String(Box<str>),
     Map(BTreeMap<Key, Value>),
     List(Vec<Value>),
+    Time(std::time::SystemTime),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Address {
+    pub id: u64,
+    pub ip_addr: std::net::IpAddr,
 }
