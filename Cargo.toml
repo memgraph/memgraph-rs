@@ -1,0 +1,15 @@
+[package]
+name = "memgraph"
+version = "0.1.1"
+edition = "2021"
+license = "BUSL-1.1"
+description = "graph database built for teams who expect highly performant, advanced analytical insights"
+authors = ["Tyler Neely <tylerneely@gmail.com>", "Memgraph Core Team <core@memgraph.io>"]
+categories = [ "database-implementations" ]
+keywords = ["db", "database", "graph", "distributed", "neo4j"]
+
+[workspace]
+members = ["memgraph-client", "open-cypher", "bolt-protocol"]
+
+[dependencies]
+serde = { version = "1.0.152", features = ["derive"] }
