@@ -1,0 +1,36 @@
+[package]
+name = "memgraph-fuzz"
+version = "0.0.0"
+authors = ["Automatically generated"]
+publish = false
+edition = "2018"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+arbitrary = { version = "1.0.3", features = ["derive"] }
+
+[dependencies.libfuzzer-sys]
+version = "0.4.0"
+features = ["arbitrary-derive"]
+
+[dependencies.memgraph]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "basic_request"
+path = "fuzz_targets/basic_request.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "varint"
+path = "fuzz_targets/varint.rs"
+test = false
+doc = false
+
