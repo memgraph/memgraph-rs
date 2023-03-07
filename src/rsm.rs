@@ -15,7 +15,7 @@ use std::path::Path;
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::{Address, Io};
+use crate::{Address, Io, Message};
 
 pub trait Rsm: Sized + Serialize + DeserializeOwned {
     type ReadReq: Serialize + DeserializeOwned;
@@ -87,12 +87,23 @@ pub struct ReadRes<R: Rsm> {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AppendReq<R: Rsm> {
-    pd: PhantomData<R>,
+    term: Term,
+    batch_start_log_index: u64,
+    last_log_term: Term,
+    entries: Vec<(Term, R::WriteReq)>,
+    leader_commit: u64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct AppendRes<R: Rsm> {
-    pd: PhantomData<R>,
+pub struct AppendRes {
+    success: bool,
+    term: Term,
+    last_log_term: Term,
+    // a small optimization over the raft paper, tells
+    // the leader the offset that we are interested in
+    // to send log offsets from for us. This will only
+    // be useful at the beginning of a leader's term.
+    log_size: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -123,7 +134,7 @@ impl<R: Rsm> Replica<R> {
         todo!()
     }
 
-    fn handle_append_res(&mut self, req: AppendRes<R>) {
+    fn handle_append_res(&mut self, req: AppendRes) {
         todo!()
     }
 

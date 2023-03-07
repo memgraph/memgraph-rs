@@ -25,43 +25,20 @@ pub type VertexPropertyId = u64;
 pub struct Timeout;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Request {
-    Coordinator(CoordinatorReq),
-    Shard(ShardReq),
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum CoordinatorReq {
-    CoordinatorAppend(AppendReq<Coordinator>),
-    CoordinatorRead(ReadReq<Coordinator>),
-    CoordinatorWrite(WriteReq<Coordinator>),
-    Vote(VoteReq),
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ShardReq {
-    ShardAppend(AppendReq<Shard>),
-    ShardRead(ReadReq<Shard>),
-    ShardWrite(WriteReq<Shard>),
-    Vote(VoteReq),
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Response {
-    CoordinatorAppend(AppendRes<Coordinator>),
-    CoordinatorRead(ReadRes<Coordinator>),
-    CoordinatorWrite(WriteRes<Coordinator>),
-    ShardAppend(AppendRes<Shard>),
-    ShardRead(ReadRes<Shard>),
-    ShardWrite(WriteRes<Shard>),
-    Vote(VoteRes),
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Message {
-    CoordinatorReq(CoordinatorReq),
-    ShardReq(ShardReq),
-    Response(Response),
+    AppendRes(AppendRes),
+    CoordinatorAppendReq(AppendReq<Coordinator>),
+    CoordinatorReadReq(ReadReq<Coordinator>),
+    CoordinatorReadRes(ReadRes<Coordinator>),
+    CoordinatorWriteReq(WriteReq<Coordinator>),
+    CoordinatorWriteRes(WriteRes<Coordinator>),
+    ShardAppendReq(AppendReq<Shard>),
+    ShardReadReq(ReadReq<Shard>),
+    ShardReadRes(ReadRes<Shard>),
+    ShardWriteReq(WriteReq<Shard>),
+    ShardWriteRes(WriteRes<Shard>),
+    VoteReq(VoteReq),
+    VoteRes(VoteRes),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -139,7 +116,7 @@ pub enum Value {
     Time(std::time::SystemTime),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Address {
     pub id: u64,
     pub ip_addr: std::net::IpAddr,

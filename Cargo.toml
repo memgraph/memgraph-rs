@@ -18,5 +18,6 @@ members = ["memgraph-client", "open-cypher", "bolt-protocol"]
 bincode = "1.3.3"
 crc32fast = "1.3.2"
 extreme = "666.666.666666"
+futures = "0.3.26"
 rocksdb = "0.20.1"
 serde = { version = "1.0.152", features = ["derive"] }

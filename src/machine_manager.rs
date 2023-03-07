@@ -29,14 +29,8 @@ impl MachineManager {
     fn handle(&mut self, envelope: Envelope) {
         use common::Message::*;
         match envelope.message {
-            CoordinatorReq(req) => {
-                if let Some(ref coordinator) = self.coordinator {
-                    todo!()
-                }
-            }
-            ShardReq(req) => {}
-            Response(response) => {
-                panic!("Io::request returned unexpected Response: {:?}", response);
+            _ => {
+                todo!()
             }
         }
     }
