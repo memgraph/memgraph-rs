@@ -13,7 +13,7 @@
 
 mod common;
 mod coordinator;
-mod io;
+pub mod io;
 mod machine_manager;
 mod metadata;
 mod rsm;
@@ -22,9 +22,9 @@ mod shard;
 // #[cfg(feature = "simulator")]
 pub mod simulator;
 
-use common::*;
+pub use common::*;
 use coordinator::*;
 use io::*;
 use metadata::*;
-use rsm::*;
+pub use rsm::*;
 use shard::*;

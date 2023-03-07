@@ -48,21 +48,21 @@ impl<R: Rsm> RsmClient<R> {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Term(u64);
+pub struct Term(pub u64);
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VoteReq {
-    term: Term,
-    log_size: u64,
-    last_log_term: Term,
+    pub term: Term,
+    pub log_size: u64,
+    pub last_log_term: Term,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VoteRes {
-    success: bool,
-    term: Term,
-    log_size: u64,
-    last_log_term: Term,
+    pub success: bool,
+    pub term: Term,
+    pub log_size: u64,
+    pub last_log_term: Term,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

@@ -45,7 +45,28 @@ impl Future for ReceiveFuture {
     }
 }
 
-pub trait Handle: std::fmt::Debug {
+pub struct RequestFuture {
+    pub inner: futures::channel::oneshot::Receiver<Envelope>,
+}
+
+impl Future for RequestFuture {
+    type Output = io::Result<Envelope>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut pin = unsafe { std::pin::Pin::new_unchecked(&mut self.inner) };
+
+        match pin.as_mut().poll(cx) {
+            Poll::Ready(Ok(envelope)) => Poll::Ready(Ok(envelope)),
+            Poll::Ready(Err(_)) => Poll::Ready(Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "request timed out",
+            ))),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+pub trait Handle: std::fmt::Debug + Send + Sync {
     fn shutdown(&self);
 
     fn should_shutdown(&self) -> bool;
@@ -53,6 +74,10 @@ pub trait Handle: std::fmt::Debug {
     fn send(&self, envelope: Envelope);
 
     fn receive(&self, timeout: Duration, receiver_address: &Address) -> ReceiveFuture;
+
+    fn request(&self, timeout: Duration, request_envelope: Envelope) -> RequestFuture;
+
+    fn idgen(&self) -> u64;
 
     fn now(&self) -> SystemTime;
 
@@ -67,7 +92,13 @@ pub struct Io {
 }
 
 impl Io {
-    pub fn send(&self, envelope: Envelope) {
+    pub fn send(&self, to: Address, request_id: Option<u64>, message: Message) {
+        let envelope = Envelope {
+            to: to,
+            from: self.address,
+            request_id,
+            message,
+        };
         self.handle.send(envelope)
     }
 
@@ -85,5 +116,16 @@ impl Io {
 
     pub fn timer(&self, duration: Duration) -> TimerFuture {
         self.handle.timer(duration)
+    }
+
+    pub fn request(&self, to: Address, request: Message) -> RequestFuture {
+        let request_id = Some(self.handle.idgen());
+        let request_envelope = Envelope {
+            from: self.address,
+            to,
+            message: request,
+            request_id,
+        };
+        self.handle.request(self.timeout, request_envelope)
     }
 }

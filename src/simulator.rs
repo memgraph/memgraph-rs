@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     Arc, Condvar, Mutex,
 };
 use std::task::{Context, Poll, Waker};
@@ -14,25 +14,20 @@ use crate::*;
 struct SimulatorState {
     should_shutdown: bool,
     now_us: u64,
-    unique_id_generator: u64,
     // keyed by timeout and unique ID
     timers: BTreeMap<(u64, u64), OneshotSender<()>>,
-    // keyed by receiver Address and timeout
+    // receiver address -> (timeout, oneshot)
     receivers: BTreeMap<Address, (u64, OneshotSender<Envelope>)>,
+    // (address, request id) -> (timeout, oneshot)
+    requests: BTreeMap<(Address, u64), (u64, OneshotSender<Envelope>)>,
     can_receive: BTreeMap<Address, Vec<Envelope>>,
-}
-
-impl SimulatorState {
-    fn idgen(&mut self) -> u64 {
-        self.unique_id_generator += 1;
-        self.unique_id_generator
-    }
 }
 
 #[derive(Debug, Default)]
 pub struct Simulator {
     mu: Arc<Mutex<SimulatorState>>,
     cv: Arc<Condvar>,
+    idgen: Arc<AtomicU64>,
 }
 
 impl Handle for Simulator {
@@ -47,6 +42,14 @@ impl Handle for Simulator {
 
     fn send(&self, envelope: Envelope) {
         let mut sim = self.mu.lock().unwrap();
+
+        // see if there is a request that corresponds to a request_id and recipient
+        if let Some(request_id) = envelope.request_id {
+            if let Some((_timeout, sender)) = sim.requests.remove(&(envelope.to, request_id)) {
+                sender.send(envelope);
+                return;
+            }
+        }
 
         // see if there is a receiver who can accept our message
         let rx_opt = sim.receivers.remove(&envelope.to);
@@ -66,9 +69,9 @@ impl Handle for Simulator {
     }
 
     fn receive(&self, timeout: Duration, receiver_address: &Address) -> ReceiveFuture {
-        let mut sim = self.mu.lock().unwrap();
-
         let (sender, receiver) = channel();
+
+        let mut sim = self.mu.lock().unwrap();
 
         if let Some(ref mut receivable) = sim.can_receive.get_mut(receiver_address) {
             if !receivable.is_empty() {
@@ -95,12 +98,45 @@ impl Handle for Simulator {
     }
 
     fn timer(&self, duration: Duration) -> TimerFuture {
+        let (sender, receiver) = channel();
+        let unique_id = self.idgen();
+
         let mut sim = self.mu.lock().unwrap();
         let timeout = u64::try_from(duration.as_micros()).unwrap() + sim.now_us;
-        let unique_id = sim.idgen();
-        let (sender, receiver) = channel();
         sim.timers.insert((timeout, unique_id), sender);
 
         TimerFuture { inner: receiver }
+    }
+
+    fn request(&self, timeout: Duration, request_envelope: Envelope) -> RequestFuture {
+        let (sender, receiver) = channel();
+        let ret = RequestFuture { inner: receiver };
+
+        let mut sim = self.mu.lock().unwrap();
+
+        // register our pending request
+        let timeout = u64::try_from(timeout.as_micros()).unwrap() + sim.now_us;
+        let last = sim.requests.insert(
+            (request_envelope.from, request_envelope.request_id.unwrap()),
+            (timeout, sender),
+        );
+        assert!(last.is_none());
+
+        // see if we can immediately deliver the request to the receiver
+        let rx_opt = sim.receivers.remove(&request_envelope.to);
+        if let Some((_timeout, rx_sender)) = rx_opt {
+            rx_sender.send(request_envelope);
+            return ret;
+        }
+
+        // otherwise, place the request as a receivable message for the destination
+        let mut entry = sim.can_receive.entry(request_envelope.to).or_default();
+        entry.push(request_envelope);
+
+        ret
+    }
+
+    fn idgen(&self) -> u64 {
+        self.idgen.fetch_add(1, Ordering::Relaxed)
     }
 }
