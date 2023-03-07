@@ -31,7 +31,7 @@ impl MachineManager {
         match envelope.message {
             CoordinatorReq(req) => {
                 if let Some(ref coordinator) = self.coordinator {
-                    coordinator.handle(envelope)
+                    todo!()
                 }
             }
             ShardReq(req) => {}

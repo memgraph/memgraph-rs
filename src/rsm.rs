@@ -15,7 +15,7 @@ use std::path::Path;
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::Io;
+use crate::{Address, Io};
 
 pub trait Rsm: Sized + Serialize + DeserializeOwned {
     type ReadReq: Serialize + DeserializeOwned;
@@ -26,6 +26,25 @@ pub trait Rsm: Sized + Serialize + DeserializeOwned {
     fn read(&self, request: Self::ReadReq) -> Self::ReadRes;
     fn write(&mut self, request: Self::WriteReq) -> Self::WriteRes;
     fn recover<P: AsRef<Path>>(path: P) -> io::Result<Self>;
+}
+
+pub struct RsmClient<R: Rsm> {
+    pub timeout: std::time::Duration,
+    pub retries: usize,
+    pub peers: Vec<Address>,
+    pub leader: Address,
+    pub pd: PhantomData<R>,
+    pub io: Io,
+}
+
+impl<R: Rsm> RsmClient<R> {
+    async fn read(&mut self, req: R::ReadReq) -> io::Result<R::ReadRes> {
+        todo!()
+    }
+
+    async fn write(&mut self, req: R::WriteReq) -> io::Result<R::WriteRes> {
+        todo!()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
