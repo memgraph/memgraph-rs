@@ -18,7 +18,7 @@ impl MachineManager {
 
     pub fn run(&mut self) {
         while !self.io.should_shutdown() {
-            if let Ok(envelope) = self.io.receive() {
+            if let Ok(envelope) = extreme::run(self.io.receive()) {
                 self.handle(envelope);
             } else {
                 self.cron();
