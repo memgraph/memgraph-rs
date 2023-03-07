@@ -8,6 +8,9 @@ authors = ["Memgraph Contributors <tech@memgraph.com>"]
 categories = [ "database-implementations" ]
 keywords = ["db", "database", "graph", "distributed", "neo4j"]
 
+[features]
+simulator = []
+
 [workspace]
 members = ["memgraph-client", "open-cypher", "bolt-protocol"]
 

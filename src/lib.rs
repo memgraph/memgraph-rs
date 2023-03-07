@@ -19,9 +19,12 @@ mod metadata;
 mod rsm;
 mod shard;
 
+// #[cfg(feature = "simulator")]
+pub mod simulator;
+
 use common::*;
 use coordinator::*;
-use io::Io;
+use io::*;
 use metadata::*;
 use rsm::*;
 use shard::*;

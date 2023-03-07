@@ -1,11 +1,27 @@
 use std::future::Future;
 use std::io;
 use std::pin::Pin;
-use std::sync::{atomic::AtomicBool, Arc};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, RwLock,
+};
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
 
 use crate::*;
+
+pub struct TimerFuture {
+    inner: Box<dyn Future<Output = ()>>,
+}
+
+impl Future for TimerFuture {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut pin = unsafe { std::pin::Pin::new_unchecked(&mut *self.inner) };
+        pin.as_mut().poll(cx)
+    }
+}
 
 pub struct ReceiveFuture {
     inner: Box<dyn Future<Output = io::Result<Envelope>>>,
@@ -28,12 +44,13 @@ pub trait Handle: std::fmt::Debug {
     fn receive(&self, timeout: Duration) -> ReceiveFuture;
 
     fn now(&self) -> SystemTime;
+
+    fn timer(&self, duration: Duration) -> TimerFuture;
 }
 
 #[derive(Debug, Clone)]
 pub struct Io {
     pub timeout: Duration,
-    pub should_shutdown: Arc<AtomicBool>,
     pub handle: Arc<dyn Handle>,
 }
 
@@ -47,10 +64,14 @@ impl Io {
     }
 
     pub fn should_shutdown(&self) -> bool {
-        todo!()
+        self.handle.should_shutdown()
     }
 
     pub fn now(&self) -> SystemTime {
         self.handle.now()
+    }
+
+    pub fn timer(&self, duration: Duration) -> TimerFuture {
+        self.handle.timer(duration)
     }
 }
