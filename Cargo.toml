@@ -12,5 +12,6 @@ keywords = ["db", "database", "graph", "distributed", "neo4j"]
 members = ["memgraph-client", "open-cypher", "bolt-protocol"]
 
 [dependencies]
+crc32fast = "1.3.2"
 rocksdb = "0.20.1"
 serde = { version = "1.0.152", features = ["derive"] }

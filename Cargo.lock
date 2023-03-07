@@ -186,6 +186,7 @@ checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
 name = "memgraph"
 version = "0.1.1"
 dependencies = [
+ "crc32fast",
  "rocksdb",
  "serde",
 ]
