@@ -9,23 +9,17 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-#![allow(unused)]
+use crc32fast::Hasher;
 
-mod common;
-mod coordinator;
-pub mod io;
-mod machine_manager;
-mod metadata;
-mod rsm;
-pub mod serialization;
-mod shard;
+use memgraph::serialization::*;
 
-// #[cfg(feature = "simulator")]
-pub mod simulator;
-
-pub use common::*;
-use coordinator::*;
-use io::*;
-use metadata::*;
-pub use rsm::*;
-use shard::*;
+#[test]
+fn basic_serialization() {
+    let x = Basic { a: 42, b: 1023 };
+    let serialized = bincode::serialize(&x).unwrap();
+    println!("DATA: {:x?}", serialized);
+    let mut hasher = Hasher::new();
+    hasher.update(&serialized);
+    let checksum = hasher.finalize();
+    println!("HASH: {}", checksum);
+}
