@@ -79,8 +79,8 @@ pub enum RsmMessage<R: Rsm> {
     WriteRes(R::WriteRes),
     VoteReq {
         proposed_leadership_term: Term,
-        last_log_term: Term,
-        committed_log_size: usize,
+        last_log_term: Option<Term>,
+        committed_log_size: u64,
     },
     VoteRes {
         success: bool,
@@ -97,7 +97,7 @@ pub enum RsmMessage<R: Rsm> {
 pub struct AppendReq<Req> {
     term: Term,
     batch_start_log_index: u64,
-    last_log_term: Term,
+    last_log_term: Option<Term>,
     entries: Vec<(Term, Req)>,
     leader_commit: u64,
 }
@@ -106,7 +106,7 @@ pub struct AppendReq<Req> {
 pub struct AppendRes {
     success: bool,
     term: Term,
-    last_log_term: Term,
+    last_log_term: Option<Term>,
     // a small optimization over the raft paper, tells
     // the leader the offset that we are interested in
     // to send log offsets from for us. This will only
@@ -136,7 +136,7 @@ pub struct Replica<R: Rsm> {
     state: R,
     log: Vec<(Term, R::WriteReq)>,
     pending_requests: HashMap<usize, (Address, Option<u64>)>,
-    commit_index: usize,
+    committed_log_size: u64,
     io: Io,
     role: Role,
     peers: Vec<Address>,
@@ -190,12 +190,12 @@ impl<R: Rsm> Replica<R> {
 
         let vote_req = R::wrap(RsmMessage::<R>::VoteReq {
             proposed_leadership_term: term,
-            last_log_term: self
-                .log
-                .get(self.commit_index)
-                .map(|l| l.0)
-                .unwrap_or(Term(0)),
-            committed_log_size: self.commit_index,
+            last_log_term: if self.committed_log_size > 0 {
+                self.log.get(self.committed_log_size as usize).map(|l| l.0)
+            } else {
+                None
+            },
+            committed_log_size: self.committed_log_size,
         });
 
         for peer in &self.peers {
@@ -315,8 +315,8 @@ impl<R: Rsm> Replica<R> {
         from: Address,
         request_id: Option<u64>,
         proposed_leadership_term: Term,
-        last_log_term: Term,
-        committed_log_size: usize,
+        last_log_term: Option<Term>,
+        committed_log_size: u64,
     ) {
         todo!()
     }
