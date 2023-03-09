@@ -18,10 +18,11 @@ use std::task::{Context, Poll, Waker};
 use std::time::{Duration, SystemTime};
 
 use futures::channel::oneshot::{channel, Receiver as OneshotReceiver, Sender as OneshotSender};
+use rand::{Rng, SeedableRng};
 
 use crate::*;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct SimulatorState {
     should_shutdown: bool,
     now_us: u64,
@@ -32,6 +33,21 @@ struct SimulatorState {
     // (address, request id) -> (timeout, oneshot)
     requests: BTreeMap<(Address, u64), (u64, OneshotSender<Envelope>)>,
     can_receive: BTreeMap<Address, Vec<Envelope>>,
+    rng: rand_chacha::ChaCha8Rng,
+}
+
+impl Default for SimulatorState {
+    fn default() -> SimulatorState {
+        SimulatorState {
+            should_shutdown: Default::default(),
+            now_us: Default::default(),
+            timers: Default::default(),
+            receivers: Default::default(),
+            requests: Default::default(),
+            can_receive: Default::default(),
+            rng: rand_chacha::ChaCha8Rng::from_seed([0; 32]),
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -149,5 +165,10 @@ impl Handle for Simulator {
 
     fn idgen(&self) -> u64 {
         self.idgen.fetch_add(1, Ordering::Relaxed)
+    }
+
+    fn rand(&self, low: u64, high: u64) -> u64 {
+        let mut sim = self.mu.lock().unwrap();
+        sim.rng.gen_range(low..high)
     }
 }

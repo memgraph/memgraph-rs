@@ -9,10 +9,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::io;
 use std::marker::PhantomData;
 use std::path::Path;
+use std::time::SystemTime;
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -60,54 +62,35 @@ pub type RsmResult<R> = Result<R, Redirect>;
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Term(pub u64);
 
+impl Term {
+    #[must_use]
+    fn increment(&self) -> Term {
+        Term(self.0 + 1)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RsmMessage<R: Rsm> {
     AppendReq(AppendReq<R::WriteReq>),
     AppendRes(AppendRes),
-    ReadReq(ReadReq<R::ReadReq>),
-    ReadRes(ReadRes<R::ReadRes>),
-    WriteReq(WriteReq<R::WriteReq>),
-    WriteRes(WriteRes<R::WriteRes>),
-    VoteReq(VoteReq),
-    VoteRes(VoteRes),
-    Redirect { leader: Address, term: Term },
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct VoteReq {
-    pub term: Term,
-    pub log_size: u64,
-    pub last_log_term: Term,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct VoteRes {
-    pub success: bool,
-    pub term: Term,
-    pub log_size: u64,
-    pub last_log_term: Term,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct WriteReq<Req> {
-    req: Req,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum WriteRes<Res> {
-    Response(Res),
-    Redirect(Address),
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ReadReq<Req> {
-    req: Req,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ReadRes<Res> {
-    Response(Res),
-    Redirect(Address),
+    ReadReq(R::ReadReq),
+    ReadRes(R::ReadRes),
+    WriteReq(R::WriteReq),
+    WriteRes(R::WriteRes),
+    VoteReq {
+        proposed_leadership_term: Term,
+        last_log_term: Term,
+        committed_log_size: usize,
+    },
+    VoteRes {
+        success: bool,
+        term: Term,
+        committed_log_size: u64,
+    },
+    Redirect {
+        leader: Address,
+        term: Term,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -133,40 +116,50 @@ pub struct AppendRes {
 
 #[derive(Debug, Clone)]
 enum Role {
-    Candidate,
-    Leader,
-    Follower { leader: Address, term: Term },
-}
-
-// This is a macro so that it can cause an early-return
-// in the context that it is expanded in.
-macro_rules! maybe_redirect_or_drop {
-    ($self:expr, $from:expr, $request_id:expr) => {
-        match &$self.role {
-            Role::Candidate => return,
-            Role::Follower { leader, term } => {
-                let redirect_msg = R::wrap(RsmMessage::Redirect {
-                    leader: *leader,
-                    term: *term,
-                });
-                $self.io.send($from, $request_id, redirect_msg);
-
-                return;
-            }
-            Role::Leader => {}
-        }
-    };
+    Candidate {
+        term: Term,
+        successes: HashSet<Address>,
+        outstanding_votes: HashSet<Address>,
+        attempt_expiration: SystemTime,
+    },
+    Leader {
+        term: Term,
+    },
+    Follower {
+        leader: Address,
+        term: Term,
+    },
 }
 
 #[derive(Debug, Clone)]
 pub struct Replica<R: Rsm> {
     state: R,
+    log: Vec<(Term, R::WriteReq)>,
+    pending_requests: HashMap<usize, (Address, Option<u64>)>,
+    commit_index: usize,
     io: Io,
     role: Role,
+    peers: Vec<Address>,
+    leader_timeout: SystemTime,
 }
 
 impl<R: Rsm> Replica<R> {
     fn cron(&mut self) {
+        let now = self.io.now();
+        match &self.role {
+            Role::Candidate {
+                attempt_expiration, ..
+            } => {
+                if &now >= attempt_expiration {
+                    return self.become_candidate();
+                }
+            }
+            Role::Follower { .. } => {
+                return;
+            }
+            Role::Leader { term } => {}
+        }
+
         // return early unless leader
 
         // handle timeouts
@@ -175,18 +168,77 @@ impl<R: Rsm> Replica<R> {
         todo!()
     }
 
+    fn term(&self) -> Term {
+        match &self.role {
+            Role::Candidate { term, .. } | Role::Follower { term, .. } | Role::Leader { term } => {
+                *term
+            }
+        }
+    }
+
+    fn become_candidate(&mut self) {
+        let now = self.io.now();
+        let expiration_ms = self.io.rand(150, 300);
+        let term = self.term().increment();
+
+        self.role = Role::Candidate {
+            successes: HashSet::new(),
+            attempt_expiration: now + std::time::Duration::from_millis(expiration_ms),
+            outstanding_votes: self.peers.iter().copied().collect(),
+            term,
+        };
+
+        let vote_req = R::wrap(RsmMessage::<R>::VoteReq {
+            proposed_leadership_term: term,
+            last_log_term: self
+                .log
+                .get(self.commit_index)
+                .map(|l| l.0)
+                .unwrap_or(Term(0)),
+            committed_log_size: self.commit_index,
+        });
+
+        for peer in &self.peers {
+            self.io.send(*peer, None, vote_req.clone());
+        }
+    }
+
     fn receive(&mut self, envelope: Envelope) {
         match R::unwrap(envelope.message) {
-            Ok(RsmMessage::AppendReq(append_req)) => self.handle_append_req(append_req),
-            Ok(RsmMessage::AppendRes(append_res)) => self.handle_append_res(append_res),
+            Ok(RsmMessage::AppendReq(append_req)) => {
+                self.handle_append_req(envelope.from, envelope.request_id, append_req)
+            }
+            Ok(RsmMessage::AppendRes(append_res)) => {
+                self.handle_append_res(envelope.from, envelope.request_id, append_res)
+            }
             Ok(RsmMessage::ReadReq(read_req)) => {
                 self.handle_read_req(envelope.from, envelope.request_id, read_req)
             }
             Ok(RsmMessage::WriteReq(write_req)) => {
                 self.handle_write_req(envelope.from, envelope.request_id, write_req)
             }
-            Ok(RsmMessage::VoteReq(vote_req)) => self.handle_vote_req(vote_req),
-            Ok(RsmMessage::VoteRes(vote_res)) => self.handle_vote_res(vote_res),
+            Ok(RsmMessage::VoteReq {
+                proposed_leadership_term,
+                last_log_term,
+                committed_log_size,
+            }) => self.handle_vote_req(
+                envelope.from,
+                envelope.request_id,
+                proposed_leadership_term,
+                last_log_term,
+                committed_log_size,
+            ),
+            Ok(RsmMessage::VoteRes {
+                success,
+                term,
+                committed_log_size,
+            }) => self.handle_vote_res(
+                envelope.from,
+                envelope.request_id,
+                success,
+                term,
+                committed_log_size,
+            ),
             Ok(RsmMessage::ReadRes(unexpected)) => {
                 panic!("received unexpected message: {:?}", unexpected);
             }
@@ -202,39 +254,81 @@ impl<R: Rsm> Replica<R> {
         }
     }
 
-    fn handle_read_req(
+    fn handle_read_req(&mut self, from: Address, request_id: Option<u64>, req: R::ReadReq) {
+        match &self.role {
+            Role::Candidate { .. } => return,
+            Role::Follower { leader, term } => {
+                let redirect_msg = R::wrap(RsmMessage::Redirect {
+                    leader: *leader,
+                    term: *term,
+                });
+                self.io.send(from, request_id, redirect_msg);
+
+                return;
+            }
+            Role::Leader { term } => {}
+        }
+
+        let res = self.state.read(req);
+
+        let wrapped = R::wrap(RsmMessage::ReadRes(res));
+
+        self.io.send(from, request_id, wrapped);
+    }
+
+    fn handle_write_req(&mut self, from: Address, request_id: Option<u64>, req: R::WriteReq) {
+        match &self.role {
+            Role::Candidate { .. } => return,
+            Role::Follower { leader, term } => {
+                let redirect_msg = R::wrap(RsmMessage::Redirect {
+                    leader: *leader,
+                    term: *term,
+                });
+                self.io.send(from, request_id, redirect_msg);
+
+                return;
+            }
+            Role::Leader { term } => {
+                self.log.push((*term, req));
+                self.pending_requests
+                    .insert(self.log.len(), (from, request_id));
+            }
+        }
+    }
+
+    fn handle_append_req(
         &mut self,
         from: Address,
         request_id: Option<u64>,
-        req: ReadReq<R::ReadReq>,
+        req: AppendReq<R::WriteReq>,
     ) {
-        maybe_redirect_or_drop!(self, from, request_id);
+        // if we don't follow them, possibly start doing so
         todo!()
     }
 
-    fn handle_write_req(
+    fn handle_append_res(&mut self, from: Address, request_id: Option<u64>, req: AppendRes) {
+        todo!()
+    }
+
+    fn handle_vote_req(
         &mut self,
         from: Address,
         request_id: Option<u64>,
-        req: WriteReq<R::WriteReq>,
+        proposed_leadership_term: Term,
+        last_log_term: Term,
+        committed_log_size: usize,
     ) {
-        maybe_redirect_or_drop!(self, from, request_id);
         todo!()
     }
 
-    fn handle_append_req(&mut self, req: AppendReq<R::WriteReq>) {
-        todo!()
-    }
-
-    fn handle_append_res(&mut self, req: AppendRes) {
-        todo!()
-    }
-
-    fn handle_vote_req(&mut self, req: VoteReq) {
-        todo!()
-    }
-
-    fn handle_vote_res(&mut self, req: VoteRes) {
+    fn handle_vote_res(
+        &mut self,
+        from: Address,
+        request_id: Option<u64>,
+        success: bool,
+        term: Term,
+        committed_log_size: u64,
+    ) {
         todo!()
     }
 }
