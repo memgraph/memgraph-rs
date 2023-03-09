@@ -1,0 +1,59 @@
+name: Memgraph Rust
+
+on:
+  pull_request:
+    branches:
+    - main
+
+jobs:
+  clippy_check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
+            components: clippy
+            override: true
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features
+  default:
+    name: Cargo Test on ${{ matrix.os }}
+    env:
+      RUST_BACKTRACE: 1
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+    - uses: actions/checkout@v1
+    - name: Cache target
+      uses: actions/cache@v2
+      env:
+        cache-name: cache-default-target-and-lockfile
+      with:
+        path: |
+          target
+          Cargo.lock
+          ~/.rustup
+        key: ${{ runner.os }}-${{ env.cache-name }}-${{ hashFiles('**/Cargo.toml') }}
+    - name: linux coredump setup
+      if: ${{ runner.os == 'linux' }}
+      run: |
+        ulimit -c unlimited
+        echo "$PWD/core-dumps/corefile-%e-%p-%t" | sudo tee /proc/sys/kernel/core_pattern
+        mkdir core-dumps
+    - name: cargo test
+      run: |
+        rustup update --no-self-update
+        cargo test --release -- --nocapture
+    - uses: actions/upload-artifact@v2
+      if: ${{ failure() && runner.os == 'linux' }}
+      with:
+        name: linux-core-dumps
+        path: |
+          ./core-dumps/*
+          ./target/release/deps/test_*
