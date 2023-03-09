@@ -12,6 +12,8 @@
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 
+use futures::executor::block_on;
+
 use memgraph::*;
 
 #[test]
@@ -42,7 +44,7 @@ fn basic_request() {
 
     let srv_thread = std::thread::spawn(move || {
         println!("server receiving");
-        let req = extreme::run(srv_io.receive()).expect("request should not time out");
+        let req = block_on(srv_io.receive()).expect("request should not time out");
         dbg!(&req);
 
         let res = Message::VoteRes(memgraph::VoteRes {
@@ -60,7 +62,7 @@ fn basic_request() {
         log_size: 0,
         term: Term(0),
     });
-    let res = extreme::run(cli_io.request(srv_address, req));
+    let res = block_on(cli_io.request(srv_address, req));
     dbg!(res);
     println!("client got response");
 }

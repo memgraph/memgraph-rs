@@ -14,6 +14,8 @@ use std::io;
 use std::marker::PhantomData;
 use std::path::Path;
 
+use futures::executor::block_on;
+
 use crate::*;
 
 pub struct MachineManager {
@@ -29,7 +31,7 @@ impl MachineManager {
 
     pub fn run(&mut self) {
         while !self.io.should_shutdown() {
-            if let Ok(envelope) = extreme::run(self.io.receive()) {
+            if let Ok(envelope) = block_on(self.io.receive()) {
                 self.handle(envelope);
             } else {
                 self.cron();
