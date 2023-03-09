@@ -53,11 +53,11 @@ impl Rsm for Coordinator {
         Message::Coordinator(msg)
     }
 
-    fn unwrap(msg: Message) -> RsmMessage<Coordinator> {
+    fn unwrap(msg: Message) -> Result<RsmMessage<Coordinator>, Message> {
         if let Message::Coordinator(wrapped) = msg {
-            wrapped
+            Ok(wrapped)
         } else {
-            unreachable!()
+            Err(msg)
         }
     }
 }

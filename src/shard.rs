@@ -53,11 +53,11 @@ impl Rsm for Shard {
         Message::Shard(msg)
     }
 
-    fn unwrap(msg: Message) -> RsmMessage<Shard> {
+    fn unwrap(msg: Message) -> Result<RsmMessage<Shard>, Message> {
         if let Message::Shard(wrapped) = msg {
-            wrapped
+            Ok(wrapped)
         } else {
-            unreachable!()
+            Err(msg)
         }
     }
 }
