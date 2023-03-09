@@ -40,9 +40,7 @@ impl MachineManager {
     fn handle(&mut self, envelope: Envelope) {
         use common::Message::*;
         match envelope.message {
-            _ => {
-                todo!()
-            }
+            _ => todo!(),
         }
     }
 
