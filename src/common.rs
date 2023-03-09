@@ -25,20 +25,20 @@ pub type VertexPropertyId = u64;
 pub struct Timeout;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum CypherRequest {
+    Union(Vec<CypherRequest>),
+    Explain(Box<CypherRequest>),
+    Profile(Box<CypherRequest>),
+    Create,
+    Match,
+    Merge,
+    Unwind,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Message {
-    AppendRes(AppendRes),
-    CoordinatorAppendReq(AppendReq<Coordinator>),
-    CoordinatorReadReq(ReadReq<Coordinator>),
-    CoordinatorReadRes(ReadRes<Coordinator>),
-    CoordinatorWriteReq(WriteReq<Coordinator>),
-    CoordinatorWriteRes(WriteRes<Coordinator>),
-    ShardAppendReq(AppendReq<Shard>),
-    ShardReadReq(ReadReq<Shard>),
-    ShardReadRes(ReadRes<Shard>),
-    ShardWriteReq(WriteReq<Shard>),
-    ShardWriteRes(WriteRes<Shard>),
-    VoteReq(VoteReq),
-    VoteRes(VoteRes),
+    Shard(RsmMessage<Shard>),
+    Coordinator(RsmMessage<Coordinator>),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

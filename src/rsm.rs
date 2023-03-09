@@ -17,15 +17,17 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::{Address, Io, Message};
 
-pub trait Rsm: Sized + Serialize + DeserializeOwned {
-    type ReadReq: Serialize + DeserializeOwned;
-    type ReadRes: Serialize + DeserializeOwned;
-    type WriteReq: Serialize + DeserializeOwned;
-    type WriteRes: Serialize + DeserializeOwned;
+pub trait Rsm: Sized + Serialize + for<'a> Deserialize<'a> {
+    type ReadReq: Serialize + for<'a> Deserialize<'a>;
+    type ReadRes: Serialize + for<'a> Deserialize<'a>;
+    type WriteReq: Serialize + for<'a> Deserialize<'a>;
+    type WriteRes: Serialize + for<'a> Deserialize<'a>;
 
     fn read(&self, request: Self::ReadReq) -> Self::ReadRes;
     fn write(&mut self, request: Self::WriteReq) -> Self::WriteRes;
     fn recover<P: AsRef<Path>>(path: P) -> io::Result<Self>;
+    fn wrap(msg: RsmMessage<Self>) -> Message;
+    fn unwrap(msg: Message) -> RsmMessage<Self>;
 }
 
 pub struct RsmClient<R: Rsm> {
@@ -51,6 +53,18 @@ impl<R: Rsm> RsmClient<R> {
 pub struct Term(pub u64);
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RsmMessage<R: Rsm> {
+    AppendReq(AppendReq<R::WriteReq>),
+    AppendRes(AppendRes),
+    ReadReq(ReadReq<R::ReadReq>),
+    ReadRes(ReadRes<R::ReadRes>),
+    WriteReq(WriteReq<R::WriteReq>),
+    WriteRes(WriteRes<R::WriteRes>),
+    VoteReq(VoteReq),
+    VoteRes(VoteRes),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VoteReq {
     pub term: Term,
     pub log_size: u64,
@@ -66,31 +80,33 @@ pub struct VoteRes {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct WriteReq<R: Rsm> {
-    req: R::WriteReq,
+pub struct WriteReq<Req> {
+    req: Req,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct WriteRes<R: Rsm> {
-    res: R::WriteRes,
+pub enum WriteRes<Res> {
+    Response(Res),
+    Redirect(Address),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ReadReq<R: Rsm> {
-    req: R::ReadReq,
+pub struct ReadReq<Req> {
+    req: Req,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ReadRes<R: Rsm> {
-    res: R::ReadRes,
+pub enum ReadRes<Res> {
+    Response(Res),
+    Redirect(Address),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct AppendReq<R: Rsm> {
+pub struct AppendReq<Req> {
     term: Term,
     batch_start_log_index: u64,
     last_log_term: Term,
-    entries: Vec<(Term, R::WriteReq)>,
+    entries: Vec<(Term, Req)>,
     leader_commit: u64,
 }
 

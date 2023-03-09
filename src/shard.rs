@@ -48,4 +48,16 @@ impl Rsm for Shard {
     fn recover<P: AsRef<Path>>(path: P) -> io::Result<Shard> {
         todo!()
     }
+
+    fn wrap(msg: RsmMessage<Shard>) -> Message {
+        Message::Shard(msg)
+    }
+
+    fn unwrap(msg: Message) -> RsmMessage<Shard> {
+        if let Message::Shard(wrapped) = msg {
+            wrapped
+        } else {
+            unreachable!()
+        }
+    }
 }

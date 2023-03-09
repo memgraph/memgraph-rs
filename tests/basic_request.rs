@@ -47,21 +47,21 @@ fn basic_request() {
         let req = block_on(srv_io.receive()).expect("request should not time out");
         dbg!(&req);
 
-        let res = Message::VoteRes(memgraph::VoteRes {
+        let res = Message::Coordinator(CoordinatorMessage::VoteRes(memgraph::VoteRes {
             success: true,
             last_log_term: Term(0),
             log_size: 0,
             term: Term(0),
-        });
+        }));
 
         srv_io.send(req.from, req.request_id, res);
     });
 
-    let req = Message::VoteReq(memgraph::VoteReq {
+    let req = Message::Coordinator(CoordinatorMessage::VoteReq(memgraph::VoteReq {
         last_log_term: Term(0),
         log_size: 0,
         term: Term(0),
-    });
+    }));
     let res = block_on(cli_io.request(srv_address, req));
     dbg!(res);
     println!("client got response");

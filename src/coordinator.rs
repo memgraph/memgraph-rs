@@ -48,4 +48,16 @@ impl Rsm for Coordinator {
     fn recover<P: AsRef<Path>>(path: P) -> io::Result<Coordinator> {
         todo!()
     }
+
+    fn wrap(msg: RsmMessage<Coordinator>) -> Message {
+        Message::Coordinator(msg)
+    }
+
+    fn unwrap(msg: Message) -> RsmMessage<Coordinator> {
+        if let Message::Coordinator(wrapped) = msg {
+            wrapped
+        } else {
+            unreachable!()
+        }
+    }
 }
