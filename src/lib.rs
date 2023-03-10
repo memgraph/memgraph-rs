@@ -18,6 +18,7 @@ mod machine_manager;
 mod metadata;
 pub mod rsm;
 mod shard;
+mod shard_map;
 pub mod simulator;
 
 pub use common::*;
@@ -26,5 +27,6 @@ use io::*;
 use metadata::*;
 pub use rsm::*;
 pub use shard::*;
+pub use shard_map::*;
 
 pub use machine_manager::MachineManager;

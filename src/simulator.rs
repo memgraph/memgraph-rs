@@ -34,6 +34,28 @@ struct SimulatorState {
     requests: BTreeMap<(Address, u64), (u64, OneshotSender<Envelope>)>,
     can_receive: BTreeMap<Address, Vec<Envelope>>,
     rng: rand_chacha::ChaCha8Rng,
+    server_count: usize,
+}
+
+impl SimulatorState {
+    fn maybe_tick(&mut self) {
+        if !self.quiescent() {
+            return;
+        }
+
+        self.now_us += 1000;
+
+        self.receivers
+            .retain(|_addr, (timeout, _oneshot)| *timeout > self.now_us);
+
+        self.requests
+            .retain(|(_addr, _request_id), (timeout, _oneshot)| *timeout > self.now_us);
+    }
+
+    fn quiescent(&self) -> bool {
+        let n_quiescent = self.receivers.len();
+        n_quiescent == self.server_count
+    }
 }
 
 impl Default for SimulatorState {
@@ -46,15 +68,34 @@ impl Default for SimulatorState {
             requests: Default::default(),
             can_receive: Default::default(),
             rng: rand_chacha::ChaCha8Rng::from_seed([0; 32]),
+            server_count: 1,
         }
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Simulator {
     mu: Arc<Mutex<SimulatorState>>,
     cv: Arc<Condvar>,
     idgen: Arc<AtomicU64>,
+}
+
+impl Simulator {
+    pub fn start_ticker_thread(&self) -> std::thread::JoinHandle<()> {
+        let sim = self.clone();
+
+        std::thread::spawn(move || sim.ticker())
+    }
+
+    fn ticker(self) {
+        loop {
+            let mut sim = self.mu.lock().unwrap();
+            sim.maybe_tick();
+            if sim.should_shutdown {
+                return;
+            }
+        }
+    }
 }
 
 impl Handle for Simulator {
@@ -69,6 +110,7 @@ impl Handle for Simulator {
 
     fn send(&self, envelope: Envelope) {
         let mut sim = self.mu.lock().unwrap();
+        self.cv.notify_all();
 
         // see if there is a request that corresponds to a request_id and recipient
         if let Some(request_id) = envelope.request_id {
@@ -89,16 +131,13 @@ impl Handle for Simulator {
         let mut entry = sim.can_receive.entry(envelope.to).or_default();
 
         entry.push(envelope);
-
-        drop(sim);
-
-        self.cv.notify_all();
     }
 
     fn receive(&self, timeout: Duration, receiver_address: &Address) -> ReceiveFuture {
         let (sender, receiver) = channel();
 
         let mut sim = self.mu.lock().unwrap();
+        self.cv.notify_all();
 
         if let Some(ref mut receivable) = sim.can_receive.get_mut(receiver_address) {
             if !receivable.is_empty() {
@@ -110,10 +149,6 @@ impl Handle for Simulator {
 
         let timeout = u64::try_from(timeout.as_micros()).unwrap() + sim.now_us;
         sim.receivers.insert(*receiver_address, (timeout, sender));
-
-        drop(sim);
-
-        self.cv.notify_all();
 
         ReceiveFuture { inner: receiver }
     }
@@ -140,6 +175,7 @@ impl Handle for Simulator {
         let ret = RequestFuture { inner: receiver };
 
         let mut sim = self.mu.lock().unwrap();
+        self.cv.notify_all();
 
         // register our pending request
         let timeout = u64::try_from(timeout.as_micros()).unwrap() + sim.now_us;

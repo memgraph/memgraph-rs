@@ -17,10 +17,14 @@ use serde::{Deserialize, Serialize};
 use crate::*;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum CoordinatorReadReq {}
+pub enum CoordinatorReadReq {
+    GetShardMap,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum CoordinatorReadRes {}
+pub enum CoordinatorReadRes {
+    GetShardMap(ShardMap),
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CoordinatorWriteReq {}
@@ -29,7 +33,9 @@ pub enum CoordinatorWriteReq {}
 pub enum CoordinatorWriteRes {}
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Coordinator {}
+pub struct Coordinator {
+    shard_map: ShardMap,
+}
 
 impl Rsm for Coordinator {
     type ReadReq = CoordinatorReadReq;
@@ -38,7 +44,11 @@ impl Rsm for Coordinator {
     type WriteRes = CoordinatorWriteRes;
 
     fn read(&self, req: CoordinatorReadReq) -> CoordinatorReadRes {
-        todo!()
+        match req {
+            CoordinatorReadReq::GetShardMap => {
+                CoordinatorReadRes::GetShardMap(self.shard_map.clone())
+            }
+        }
     }
 
     fn write(&mut self, req: &CoordinatorWriteReq) -> CoordinatorWriteRes {

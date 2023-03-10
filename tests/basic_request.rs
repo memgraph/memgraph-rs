@@ -42,7 +42,7 @@ fn basic_request() {
         handle: handle.clone(),
     };
 
-    let srv_thread = std::thread::spawn(move || {
+    let _srv_thread = std::thread::spawn(move || {
         println!("server receiving");
         let req = block_on(srv_io.receive()).expect("request should not time out");
         dbg!(&req);

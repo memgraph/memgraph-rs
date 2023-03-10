@@ -55,7 +55,7 @@ impl<R: Rsm> RsmClient<R> {
         }
     }
 
-    async fn read(&mut self, req: R::ReadReq) -> io::Result<R::ReadRes> {
+    pub async fn read(&mut self, req: R::ReadReq) -> io::Result<R::ReadRes> {
         let wrapped = R::wrap(RsmMessage::ReadReq(req));
 
         loop {
@@ -71,7 +71,7 @@ impl<R: Rsm> RsmClient<R> {
         }
     }
 
-    async fn write(&mut self, req: R::WriteReq) -> io::Result<R::WriteRes> {
+    pub async fn write(&mut self, req: R::WriteReq) -> io::Result<R::WriteRes> {
         let wrapped = R::wrap(RsmMessage::WriteReq(req));
 
         loop {
@@ -285,6 +285,16 @@ impl<R: Rsm> Replica<R> {
     }
 
     fn become_candidate(&mut self) {
+        if self.peers.is_empty() {
+            println!("RSM becoming Leader due to not having any peers");
+            self.role = Role::Leader {
+                term: Term(self.term().0 + 1),
+                confirmed_log_lengths: Default::default(),
+                broadcast_indices: Default::default(),
+            };
+            return;
+        }
+
         let now = self.io.now();
         let expiration_ms = self.io.rand(150, 300);
         let term = self.term().increment();
@@ -324,6 +334,7 @@ impl<R: Rsm> Replica<R> {
                 self.handle_append_res(envelope.from, append_res)
             }
             Ok(RsmMessage::ReadReq(read_req)) => {
+                println!("src/rsm.rs:327");
                 self.handle_read_req(envelope.from, envelope.request_id, read_req)
             }
             Ok(RsmMessage::WriteReq(write_req)) => {
@@ -361,7 +372,10 @@ impl<R: Rsm> Replica<R> {
 
     fn handle_read_req(&mut self, from: Address, request_id: Option<u64>, req: R::ReadReq) {
         match &self.role {
-            Role::Candidate { .. } => return,
+            Role::Candidate { .. } => {
+                println!("Candidate not returning read response");
+                return;
+            }
             Role::Follower { leader, term, .. } => {
                 let redirect_msg = R::wrap(RsmMessage::Redirect {
                     leader: *leader,

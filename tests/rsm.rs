@@ -19,7 +19,9 @@ use memgraph::*;
 
 #[test]
 fn rsm() {
-    let handle: Arc<dyn memgraph::io::Handle> = Arc::new(memgraph::simulator::Simulator::default());
+    let sim = memgraph::simulator::Simulator::default();
+    sim.start_ticker_thread();
+    let handle: Arc<dyn memgraph::io::Handle> = Arc::new(sim);
 
     let cli_addr = Address {
         id: 0,
@@ -54,4 +56,14 @@ fn rsm() {
 
     let mut coord_client = RsmClient::<Coordinator>::new(vec![srv_address], cli_io.clone());
     let mut shard_client = RsmClient::<Shard>::new(vec![shard_addr], cli_io);
+
+    loop {
+        let shard_map_res = block_on(coord_client.read(CoordinatorReadReq::GetShardMap));
+        if shard_map_res.is_err() {
+            println!("retrying request");
+            continue;
+        }
+        println!("got shard map");
+        return;
+    }
 }
