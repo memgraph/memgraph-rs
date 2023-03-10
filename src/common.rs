@@ -95,6 +95,15 @@ pub enum Key {
     },
 }
 
+impl Default for Key {
+    fn default() -> Key {
+        Key::Vertex {
+            label: 0,
+            key: vec![],
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SchemaPart {
     #[default]
@@ -119,5 +128,12 @@ pub enum Value {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Address {
     pub id: u64,
+    pub port: u16,
     pub ip_addr: std::net::IpAddr,
+}
+
+impl Address {
+    pub fn to_machine(&self) -> (std::net::IpAddr, u16) {
+        (self.ip_addr, self.port)
+    }
 }

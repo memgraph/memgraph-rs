@@ -22,6 +22,7 @@ fn basic_request() {
 
     let cli_addr = Address {
         id: 0,
+        port: 1,
         ip_addr: IpAddr::V4(Ipv4Addr::LOCALHOST),
     };
 
@@ -33,6 +34,7 @@ fn basic_request() {
 
     let srv_address = Address {
         id: 1,
+        port: 1,
         ip_addr: IpAddr::V4(Ipv4Addr::LOCALHOST),
     };
 

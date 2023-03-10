@@ -17,10 +17,17 @@ use serde::{Deserialize, Serialize};
 use crate::*;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ShardReadReq {}
+pub enum ShardReadReq {
+    ScanAll,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ShardReadRes {}
+pub struct ScanAll;
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ShardReadRes {
+    ScanAll(ScanAll),
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ShardWriteReq {}
@@ -38,7 +45,9 @@ impl Rsm for Shard {
     type WriteRes = ShardWriteRes;
 
     fn read(&self, req: ShardReadReq) -> ShardReadRes {
-        todo!()
+        match req {
+            ShardReadReq::ScanAll => ShardReadRes::ScanAll(ScanAll),
+        }
     }
 
     fn write(&mut self, req: &ShardWriteReq) -> ShardWriteRes {

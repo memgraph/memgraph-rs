@@ -25,6 +25,7 @@ fn rsm() {
 
     let cli_addr = Address {
         id: 0,
+        port: 1,
         ip_addr: IpAddr::V4(Ipv4Addr::LOCALHOST),
     };
 
@@ -36,6 +37,7 @@ fn rsm() {
 
     let srv_address = Address {
         id: 1,
+        port: 1,
         ip_addr: IpAddr::V4(Ipv4Addr::LOCALHOST),
     };
 
@@ -51,6 +53,7 @@ fn rsm() {
 
     let shard_addr = Address {
         id: 42,
+        port: 1,
         ip_addr: IpAddr::V4(Ipv4Addr::LOCALHOST),
     };
 
@@ -59,11 +62,27 @@ fn rsm() {
 
     loop {
         let shard_map_res = block_on(coord_client.read(CoordinatorReadReq::GetShardMap));
-        if shard_map_res.is_err() {
-            println!("retrying request");
+        let shard_map = if let Ok(CoordinatorReadRes::GetShardMap(shard_map)) = shard_map_res {
+            println!("got shard map");
+            shard_map
+        } else {
+            println!("retrying coordinator request due to timeout");
             continue;
+        };
+
+        let shard_for_lookup = shard_map.peers_for_key(&Key::default());
+        assert_eq!(shard_for_lookup[0], &shard_addr);
+
+        let scan_res = block_on(shard_client.read(ShardReadReq::ScanAll));
+
+        if let Ok(ShardReadRes::ScanAll(results)) = scan_res {
+            println!("got successful response from Shard");
+            return;
+        } else {
+            println!(
+                "retrying after shard response timed out with res {:?}",
+                scan_res
+            );
         }
-        println!("got shard map");
-        return;
     }
 }

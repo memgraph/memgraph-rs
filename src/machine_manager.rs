@@ -70,7 +70,9 @@ impl MachineManager {
             .map(|id| {
                 let tree_name = rsm_id_to_serialized_name(*id);
                 let tree = db.open_tree(tree_name).unwrap();
-                let rsm: Replica<Shard> = Replica::recover(tree, io.clone())?;
+                let mut rsm: Replica<Shard> = Replica::recover(tree, io.clone())?;
+                rsm.id = *id;
+                println!("MM starting RSM with ID {:?}", *id);
                 Ok((*id, rsm))
             })
             .collect();
@@ -102,11 +104,15 @@ impl MachineManager {
         use common::Message::*;
         match &envelope.message {
             Message::Shard(_) => {
+                println!("mm got shard msg");
                 if let Some(rsm) = self.rsms.get_mut(&envelope.to.id) {
                     rsm.receive(envelope);
+                } else {
+                    panic!("shard not found: {:?}", envelope);
                 }
             }
             Message::Coordinator(_) => {
+                println!("mm got coord msg");
                 if let Some(coordinator) = &mut self.coordinator {
                     coordinator.receive(envelope);
                 }

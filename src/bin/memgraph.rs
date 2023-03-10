@@ -19,6 +19,7 @@ fn main() {
 
     let srv_address = Address {
         id: 1,
+        port: 1,
         ip_addr: IpAddr::V4(Ipv4Addr::LOCALHOST),
     };
 

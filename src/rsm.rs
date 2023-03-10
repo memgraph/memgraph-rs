@@ -49,7 +49,7 @@ impl<R: Rsm> RsmClient<R> {
         RsmClient {
             leader: peers[0],
             peers: peers,
-            timeout: Duration::from_millis(100),
+            timeout: Duration::from_millis(1000),
             io,
             pd: PhantomData,
         }
@@ -58,13 +58,21 @@ impl<R: Rsm> RsmClient<R> {
     pub async fn read(&mut self, req: R::ReadReq) -> io::Result<R::ReadRes> {
         let wrapped = R::wrap(RsmMessage::ReadReq(req));
 
+        println!("wrapped request: {:?}", wrapped);
+
         loop {
             let fut = self.io.request(self.leader, wrapped.clone());
+            println!("waiting on request");
             let res: Envelope = fut.await?;
+            println!("got response {res:?}");
+
             let unwrapped = R::unwrap(res.message).unwrap();
 
             match unwrapped {
-                RsmMessage::Redirect { leader, term } => self.leader = leader,
+                RsmMessage::Redirect { leader, term } => {
+                    println!("RsmClient got redirect to leader {leader:?}");
+                    self.leader = leader
+                }
                 RsmMessage::ReadRes(res) => return Ok(res),
                 _ => unreachable!(),
             }
@@ -199,6 +207,7 @@ pub struct Replica<R: Rsm> {
     role: Role,
     peers: Vec<Address>,
     db: sled::Tree,
+    pub id: RsmId,
 }
 
 impl<R: Rsm> Replica<R> {
@@ -227,6 +236,7 @@ impl<R: Rsm> Replica<R> {
             peers: snapshot.peers,
             pending_requests: Default::default(),
             db,
+            id: snapshot.rsm_id,
         })
     }
 
@@ -286,7 +296,10 @@ impl<R: Rsm> Replica<R> {
 
     fn become_candidate(&mut self) {
         if self.peers.is_empty() {
-            println!("RSM becoming Leader due to not having any peers");
+            println!(
+                "RSM {} becoming Leader due to not having any peers",
+                self.id
+            );
             self.role = Role::Leader {
                 term: Term(self.term().0 + 1),
                 confirmed_log_lengths: Default::default(),
@@ -334,7 +347,6 @@ impl<R: Rsm> Replica<R> {
                 self.handle_append_res(envelope.from, append_res)
             }
             Ok(RsmMessage::ReadReq(read_req)) => {
-                println!("src/rsm.rs:327");
                 self.handle_read_req(envelope.from, envelope.request_id, read_req)
             }
             Ok(RsmMessage::WriteReq(write_req)) => {
