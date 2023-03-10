@@ -27,9 +27,17 @@ fn rsm_id_to_serialized_name(id: RsmId) -> Vec<u8> {
     format!("__rsm_{id}").into_bytes()
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct MachineMetadata {
     rsms: HashSet<RsmId>,
+}
+
+impl Default for MachineMetadata {
+    fn default() -> MachineMetadata {
+        MachineMetadata {
+            rsms: [42].into_iter().collect(),
+        }
+    }
 }
 
 pub struct MachineManager {

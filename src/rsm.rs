@@ -37,14 +37,24 @@ pub trait Rsm: Sized + Default + Serialize + for<'a> Deserialize<'a> {
 
 pub struct RsmClient<R: Rsm> {
     pub timeout: Duration,
-    pub retries: usize,
     pub peers: Vec<Address>,
     pub leader: Address,
-    pub pd: PhantomData<R>,
     pub io: Io,
+    pub pd: PhantomData<R>,
 }
 
 impl<R: Rsm> RsmClient<R> {
+    pub fn new(peers: Vec<Address>, io: Io) -> RsmClient<R> {
+        assert!(!peers.is_empty());
+        RsmClient {
+            leader: peers[0],
+            peers: peers,
+            timeout: Duration::from_millis(100),
+            io,
+            pd: PhantomData,
+        }
+    }
+
     async fn read(&mut self, req: R::ReadReq) -> io::Result<R::ReadRes> {
         let wrapped = R::wrap(RsmMessage::ReadReq(req));
 

@@ -61,6 +61,8 @@ fn basic_request() {
         last_log_term: None,
         committed_log_size: 0,
     });
+
     block_on(cli_io.request(srv_address, req)).unwrap();
+
     println!("client got response");
 }
