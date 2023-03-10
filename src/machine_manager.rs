@@ -35,14 +35,23 @@ impl MachineManager {
                 self.handle(envelope);
             } else {
                 self.cron();
-            }
+            };
         }
     }
 
     fn handle(&mut self, envelope: Envelope) {
         use common::Message::*;
-        match envelope.message {
-            _ => todo!(),
+        match &envelope.message {
+            Message::Shard(_) => {
+                if let Some(rsm) = self.rsms.get_mut(&envelope.to.id) {
+                    rsm.receive(envelope);
+                }
+            }
+            Message::Coordinator(_) => {
+                if let Some(coordinator) = &mut self.coordinator {
+                    coordinator.receive(envelope);
+                }
+            }
         }
     }
 

@@ -164,7 +164,11 @@ pub struct Replica<R: Rsm> {
 }
 
 impl<R: Rsm> Replica<R> {
-    fn cron(&mut self) {
+    pub fn recover<P: AsRef<Path>>(path: P) -> io::Result<Replica<R>> {
+        todo!()
+    }
+
+    pub fn cron(&mut self) {
         let now = self.io.now();
         match &mut self.role {
             Role::Candidate {
@@ -249,7 +253,7 @@ impl<R: Rsm> Replica<R> {
         self.peers.iter().filter(|p| *p != &self.address)
     }
 
-    fn receive(&mut self, envelope: Envelope) {
+    pub fn receive(&mut self, envelope: Envelope) {
         match R::unwrap(envelope.message) {
             Ok(RsmMessage::AppendReq(append_req)) => {
                 self.handle_append_req(envelope.from, append_req)
