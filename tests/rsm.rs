@@ -12,9 +12,12 @@
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 
+use futures::executor::block_on;
+
 use memgraph::*;
 
-fn main() {
+#[test]
+fn rsm() {
     let handle: Arc<dyn memgraph::io::Handle> = Arc::new(memgraph::simulator::Simulator::default());
 
     let srv_address = Address {
@@ -29,6 +32,4 @@ fn main() {
     };
 
     let mut mm = MachineManager::recover("test_mm_1", srv_io).unwrap();
-
-    mm.run();
 }

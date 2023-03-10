@@ -107,6 +107,12 @@ impl MachineManager {
     }
 
     fn cron(&mut self) {
-        todo!()
+        if let Some(coordinator) = &mut self.coordinator {
+            coordinator.cron();
+        }
+
+        for (_, rsm) in &mut self.rsms {
+            rsm.cron();
+        }
     }
 }
