@@ -28,7 +28,7 @@ pub enum ShardWriteReq {}
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ShardWriteRes {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Shard {}
 
 impl Rsm for Shard {
@@ -42,10 +42,6 @@ impl Rsm for Shard {
     }
 
     fn write(&mut self, req: &ShardWriteReq) -> ShardWriteRes {
-        todo!()
-    }
-
-    fn recover<P: AsRef<Path>>(path: P) -> io::Result<Shard> {
         todo!()
     }
 

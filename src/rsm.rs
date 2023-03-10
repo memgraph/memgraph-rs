@@ -16,11 +16,14 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
+use bincode::{deserialize, serialize};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::{Address, Envelope, Io, Message};
+use crate::{Address, Envelope, Io, Message, RsmId};
 
-pub trait Rsm: Sized + Serialize + for<'a> Deserialize<'a> {
+const SNAPSHOT_KEY: &[u8] = b"__snapshot";
+
+pub trait Rsm: Sized + Default + Serialize + for<'a> Deserialize<'a> {
     type ReadReq: fmt::Debug + Serialize + for<'a> Deserialize<'a>;
     type ReadRes: fmt::Debug + Serialize + for<'a> Deserialize<'a>;
     type WriteReq: fmt::Debug + Clone + Serialize + for<'a> Deserialize<'a>;
@@ -28,7 +31,6 @@ pub trait Rsm: Sized + Serialize + for<'a> Deserialize<'a> {
 
     fn read(&self, request: Self::ReadReq) -> Self::ReadRes;
     fn write(&mut self, request: &Self::WriteReq) -> Self::WriteRes;
-    fn recover<P: AsRef<Path>>(path: P) -> io::Result<Self>;
     fn wrap(msg: RsmMessage<Self>) -> Message;
     fn unwrap(msg: Message) -> Result<RsmMessage<Self>, Message>;
 }
@@ -150,6 +152,33 @@ enum Role {
     },
 }
 
+#[derive(Serialize, Deserialize, Default, Debug)]
+struct Snapshot<R> {
+    state: R,
+    corresponding_raft_index: u64,
+    committed_log_size: u64,
+    rsm_id: RsmId,
+    peers: Vec<Address>,
+}
+
+fn log_after_index<R: Rsm>(db: &sled::Tree, index: u64) -> io::Result<Vec<(Term, R::WriteReq)>> {
+    let key: &[u8] = &index.to_be_bytes();
+    let iter = db.range(key..);
+
+    let mut ret = vec![];
+
+    for kv_res in iter {
+        let (k, v) = kv_res?;
+        let value: (Term, R::WriteReq) = deserialize(&*v).unwrap();
+        let key_index = u64::from_be_bytes((&*k).try_into().unwrap());
+        ret.push(value);
+
+        assert_eq!(key_index, ret.len() as u64 + index);
+    }
+
+    Ok(ret)
+}
+
 #[derive(Debug, Clone)]
 pub struct Replica<R: Rsm> {
     state: R,
@@ -159,13 +188,36 @@ pub struct Replica<R: Rsm> {
     io: Io,
     role: Role,
     peers: Vec<Address>,
-    address: Address,
-    leader_timeout: SystemTime,
+    db: sled::Tree,
 }
 
 impl<R: Rsm> Replica<R> {
-    pub fn recover<P: AsRef<Path>>(path: P) -> io::Result<Replica<R>> {
-        todo!()
+    pub fn recover(db: sled::Tree, mut io: Io) -> io::Result<Replica<R>> {
+        let snapshot: Snapshot<R> = db
+            .get(SNAPSHOT_KEY)
+            .unwrap()
+            .map(|bytes| deserialize(&bytes).unwrap())
+            .unwrap_or_default();
+
+        let log = log_after_index::<R>(&db, snapshot.corresponding_raft_index)?;
+
+        io.address.id = snapshot.rsm_id;
+
+        Ok(Replica {
+            state: snapshot.state,
+            log,
+            io,
+            committed_log_size: snapshot.committed_log_size,
+            role: Role::Candidate {
+                term: Term(0),
+                successes: Default::default(),
+                outstanding_votes: Default::default(),
+                attempt_expiration: SystemTime::UNIX_EPOCH,
+            },
+            peers: snapshot.peers,
+            pending_requests: Default::default(),
+            db,
+        })
     }
 
     pub fn cron(&mut self) {
@@ -250,7 +302,7 @@ impl<R: Rsm> Replica<R> {
     }
 
     fn peers(&self) -> impl Iterator<Item = &Address> {
-        self.peers.iter().filter(|p| *p != &self.address)
+        self.peers.iter().filter(|p| *p != &self.io.address)
     }
 
     pub fn receive(&mut self, envelope: Envelope) {

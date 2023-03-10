@@ -24,5 +24,7 @@ pub use common::*;
 use coordinator::*;
 use io::*;
 use metadata::*;
-use rsm::*;
+pub use rsm::*;
 use shard::*;
+
+pub use machine_manager::MachineManager;

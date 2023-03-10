@@ -28,7 +28,7 @@ pub enum CoordinatorWriteReq {}
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CoordinatorWriteRes {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Coordinator {}
 
 impl Rsm for Coordinator {
@@ -42,10 +42,6 @@ impl Rsm for Coordinator {
     }
 
     fn write(&mut self, req: &CoordinatorWriteReq) -> CoordinatorWriteRes {
-        todo!()
-    }
-
-    fn recover<P: AsRef<Path>>(path: P) -> io::Result<Coordinator> {
         todo!()
     }
 
