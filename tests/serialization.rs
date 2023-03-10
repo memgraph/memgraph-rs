@@ -13,13 +13,25 @@ use crc32fast::Hasher;
 
 use memgraph::serialization::*;
 
+fn serialize_u64_varint(x: u64) -> Vec<u8> {
+    if x <= 1 {
+        [0x1].to_vec()
+    } else {
+        [0x1, 0x2].to_vec()
+    }
+}
+
 #[test]
 fn basic_serialization() {
     let x = Basic { a: 42, b: 1023 };
     let serialized = bincode::serialize(&x).unwrap();
-    println!("DATA: {:x?}", serialized);
+    let len = serialized.len();
+    println!("DATA: {:x?} LENGTH: {}", serialized, len);
+
     let mut hasher = Hasher::new();
     hasher.update(&serialized);
     let checksum = hasher.finalize();
     println!("HASH: {}", checksum);
+
+    println!("{:x?}", serialize_u64_varint(len as u64));
 }
