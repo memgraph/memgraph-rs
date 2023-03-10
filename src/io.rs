@@ -93,6 +93,8 @@ pub trait Handle: std::fmt::Debug + Send + Sync {
     fn now(&self) -> SystemTime;
 
     fn timer(&self, duration: Duration) -> TimerFuture;
+
+    fn rand(&self, low: u64, high: u64) -> u64;
 }
 
 #[derive(Debug, Clone)]
@@ -119,6 +121,10 @@ impl Io {
 
     pub fn should_shutdown(&self) -> bool {
         self.handle.should_shutdown()
+    }
+
+    pub fn rand(&self, low: u64, high: u64) -> u64 {
+        self.handle.rand(low, high)
     }
 
     pub fn now(&self) -> SystemTime {

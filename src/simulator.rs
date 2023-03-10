@@ -10,6 +10,7 @@
 // licenses/APL.txt.
 
 use std::collections::BTreeMap;
+use std::net::IpAddr;
 use std::sync::{
     atomic::{AtomicBool, AtomicU64, Ordering},
     Arc, Condvar, Mutex,
@@ -18,27 +19,96 @@ use std::task::{Context, Poll, Waker};
 use std::time::{Duration, SystemTime};
 
 use futures::channel::oneshot::{channel, Receiver as OneshotReceiver, Sender as OneshotSender};
+use rand::{Rng, SeedableRng};
 
 use crate::*;
 
-#[derive(Debug, Default)]
+type MachineAddress = (IpAddr, u16);
+
+#[derive(Debug)]
 struct SimulatorState {
     should_shutdown: bool,
     now_us: u64,
     // keyed by timeout and unique ID
     timers: BTreeMap<(u64, u64), OneshotSender<()>>,
     // receiver address -> (timeout, oneshot)
-    receivers: BTreeMap<Address, (u64, OneshotSender<Envelope>)>,
+    receivers: BTreeMap<MachineAddress, (u64, OneshotSender<Envelope>)>,
     // (address, request id) -> (timeout, oneshot)
-    requests: BTreeMap<(Address, u64), (u64, OneshotSender<Envelope>)>,
-    can_receive: BTreeMap<Address, Vec<Envelope>>,
+    requests: BTreeMap<(MachineAddress, u64), (u64, OneshotSender<Envelope>)>,
+    can_receive: BTreeMap<MachineAddress, Vec<Envelope>>,
+    rng: rand_chacha::ChaCha8Rng,
+    server_count: usize,
 }
 
-#[derive(Debug, Default)]
+impl SimulatorState {
+    fn maybe_tick(&mut self) {
+        if !self.quiescent() {
+            return;
+        }
+
+        self.now_us += 1000;
+
+        let rec_before = self.receivers.len();
+        self.receivers
+            .retain(|_addr, (timeout, _oneshot)| *timeout > self.now_us);
+        let rec_after = self.receivers.len();
+        if rec_before != rec_after {
+            // println!("timed out {} receivers", rec_before - rec_after);
+        }
+
+        let req_before = self.requests.len();
+        self.requests
+            .retain(|(_addr, _request_id), (timeout, _oneshot)| *timeout > self.now_us);
+        let req_after = self.requests.len();
+        if req_before != req_after {
+            println!("timed out {} requests", req_before - req_after);
+        }
+    }
+
+    fn quiescent(&self) -> bool {
+        let n_quiescent = self.receivers.len();
+        n_quiescent == self.server_count
+    }
+}
+
+impl Default for SimulatorState {
+    fn default() -> SimulatorState {
+        SimulatorState {
+            should_shutdown: Default::default(),
+            now_us: Default::default(),
+            timers: Default::default(),
+            receivers: Default::default(),
+            requests: Default::default(),
+            can_receive: Default::default(),
+            rng: rand_chacha::ChaCha8Rng::from_seed([0; 32]),
+            server_count: 1,
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct Simulator {
     mu: Arc<Mutex<SimulatorState>>,
     cv: Arc<Condvar>,
     idgen: Arc<AtomicU64>,
+}
+
+impl Simulator {
+    pub fn start_ticker_thread(&self) -> std::thread::JoinHandle<()> {
+        let sim = self.clone();
+
+        std::thread::spawn(move || sim.ticker())
+    }
+
+    fn ticker(self) {
+        loop {
+            let mut sim = self.mu.lock().unwrap();
+            sim.maybe_tick();
+            if sim.should_shutdown {
+                return;
+            }
+        }
+    }
 }
 
 impl Handle for Simulator {
@@ -53,51 +123,50 @@ impl Handle for Simulator {
 
     fn send(&self, envelope: Envelope) {
         let mut sim = self.mu.lock().unwrap();
+        self.cv.notify_all();
 
         // see if there is a request that corresponds to a request_id and recipient
         if let Some(request_id) = envelope.request_id {
-            if let Some((_timeout, sender)) = sim.requests.remove(&(envelope.to, request_id)) {
+            if let Some((_timeout, sender)) =
+                sim.requests.remove(&(envelope.to.to_machine(), request_id))
+            {
                 sender.send(envelope);
                 return;
             }
         }
 
         // see if there is a receiver who can accept our message
-        let rx_opt = sim.receivers.remove(&envelope.to);
+        let rx_opt = sim.receivers.remove(&envelope.to.to_machine());
         if let Some((_timeout, sender)) = rx_opt {
             sender.send(envelope);
             return;
         }
 
         // otherwise, add it to can_receive
-        let mut entry = sim.can_receive.entry(envelope.to).or_default();
+        let mut entry = sim.can_receive.entry(envelope.to.to_machine()).or_default();
 
         entry.push(envelope);
-
-        drop(sim);
-
-        self.cv.notify_all();
     }
 
     fn receive(&self, timeout: Duration, receiver_address: &Address) -> ReceiveFuture {
         let (sender, receiver) = channel();
 
         let mut sim = self.mu.lock().unwrap();
+        self.cv.notify_all();
 
-        if let Some(ref mut receivable) = sim.can_receive.get_mut(receiver_address) {
+        if let Some(ref mut receivable) = sim.can_receive.get_mut(&receiver_address.to_machine()) {
             if !receivable.is_empty() {
                 // can immediately fill the oneshot that we return
+                println!("immediately taking receivable");
                 sender.send(receivable.pop().unwrap());
                 return ReceiveFuture { inner: receiver };
             }
         }
 
+        println!("blocking receiver address {receiver_address:?}");
         let timeout = u64::try_from(timeout.as_micros()).unwrap() + sim.now_us;
-        sim.receivers.insert(*receiver_address, (timeout, sender));
-
-        drop(sim);
-
-        self.cv.notify_all();
+        sim.receivers
+            .insert(receiver_address.to_machine(), (timeout, sender));
 
         ReceiveFuture { inner: receiver }
     }
@@ -124,24 +193,32 @@ impl Handle for Simulator {
         let ret = RequestFuture { inner: receiver };
 
         let mut sim = self.mu.lock().unwrap();
+        self.cv.notify_all();
 
         // register our pending request
         let timeout = u64::try_from(timeout.as_micros()).unwrap() + sim.now_us;
         let last = sim.requests.insert(
-            (request_envelope.from, request_envelope.request_id.unwrap()),
+            (
+                request_envelope.from.to_machine(),
+                request_envelope.request_id.unwrap(),
+            ),
             (timeout, sender),
         );
         assert!(last.is_none());
 
         // see if we can immediately deliver the request to the receiver
-        let rx_opt = sim.receivers.remove(&request_envelope.to);
+        let rx_opt = sim.receivers.remove(&request_envelope.to.to_machine());
         if let Some((_timeout, rx_sender)) = rx_opt {
+            println!("src/simulator.rs:201");
             rx_sender.send(request_envelope);
             return ret;
         }
 
         // otherwise, place the request as a receivable message for the destination
-        let mut entry = sim.can_receive.entry(request_envelope.to).or_default();
+        let mut entry = sim
+            .can_receive
+            .entry(request_envelope.to.to_machine())
+            .or_default();
         entry.push(request_envelope);
 
         ret
@@ -149,5 +226,10 @@ impl Handle for Simulator {
 
     fn idgen(&self) -> u64 {
         self.idgen.fetch_add(1, Ordering::Relaxed)
+    }
+
+    fn rand(&self, low: u64, high: u64) -> u64 {
+        let mut sim = self.mu.lock().unwrap();
+        sim.rng.gen_range(low..high)
     }
 }

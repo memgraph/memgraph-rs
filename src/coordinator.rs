@@ -17,10 +17,14 @@ use serde::{Deserialize, Serialize};
 use crate::*;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum CoordinatorReadReq {}
+pub enum CoordinatorReadReq {
+    GetShardMap,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum CoordinatorReadRes {}
+pub enum CoordinatorReadRes {
+    GetShardMap(ShardMap),
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CoordinatorWriteReq {}
@@ -28,8 +32,10 @@ pub enum CoordinatorWriteReq {}
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CoordinatorWriteRes {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Coordinator {}
+#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Coordinator {
+    shard_map: ShardMap,
+}
 
 impl Rsm for Coordinator {
     type ReadReq = CoordinatorReadReq;
@@ -38,14 +44,26 @@ impl Rsm for Coordinator {
     type WriteRes = CoordinatorWriteRes;
 
     fn read(&self, req: CoordinatorReadReq) -> CoordinatorReadRes {
+        match req {
+            CoordinatorReadReq::GetShardMap => {
+                CoordinatorReadRes::GetShardMap(self.shard_map.clone())
+            }
+        }
+    }
+
+    fn write(&mut self, req: &CoordinatorWriteReq) -> CoordinatorWriteRes {
         todo!()
     }
 
-    fn write(&mut self, req: CoordinatorWriteReq) -> CoordinatorWriteRes {
-        todo!()
+    fn wrap(msg: RsmMessage<Coordinator>) -> Message {
+        Message::Coordinator(msg)
     }
 
-    fn recover<P: AsRef<Path>>(path: P) -> io::Result<Coordinator> {
-        todo!()
+    fn unwrap(msg: Message) -> Result<RsmMessage<Coordinator>, Message> {
+        if let Message::Coordinator(wrapped) = msg {
+            Ok(wrapped)
+        } else {
+            Err(msg)
+        }
     }
 }

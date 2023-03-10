@@ -25,20 +25,20 @@ pub type VertexPropertyId = u64;
 pub struct Timeout;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum CypherRequest {
+    Union(Vec<CypherRequest>),
+    Explain(Box<CypherRequest>),
+    Profile(Box<CypherRequest>),
+    Create,
+    Match,
+    Merge,
+    Unwind,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Message {
-    AppendRes(AppendRes),
-    CoordinatorAppendReq(AppendReq<Coordinator>),
-    CoordinatorReadReq(ReadReq<Coordinator>),
-    CoordinatorReadRes(ReadRes<Coordinator>),
-    CoordinatorWriteReq(WriteReq<Coordinator>),
-    CoordinatorWriteRes(WriteRes<Coordinator>),
-    ShardAppendReq(AppendReq<Shard>),
-    ShardReadReq(ReadReq<Shard>),
-    ShardReadRes(ReadRes<Shard>),
-    ShardWriteReq(WriteReq<Shard>),
-    ShardWriteRes(WriteRes<Shard>),
-    VoteReq(VoteReq),
-    VoteRes(VoteRes),
+    Shard(RsmMessage<Shard>),
+    Coordinator(RsmMessage<Coordinator>),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -95,6 +95,15 @@ pub enum Key {
     },
 }
 
+impl Default for Key {
+    fn default() -> Key {
+        Key::Vertex {
+            label: 0,
+            key: vec![],
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SchemaPart {
     #[default]
@@ -119,5 +128,12 @@ pub enum Value {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Address {
     pub id: u64,
+    pub port: u16,
     pub ip_addr: std::net::IpAddr,
+}
+
+impl Address {
+    pub fn to_machine(&self) -> (std::net::IpAddr, u16) {
+        (self.ip_addr, self.port)
+    }
 }
