@@ -41,7 +41,7 @@ impl Rsm for Coordinator {
         todo!()
     }
 
-    fn write(&mut self, req: CoordinatorWriteReq) -> CoordinatorWriteRes {
+    fn write(&mut self, req: &CoordinatorWriteReq) -> CoordinatorWriteRes {
         todo!()
     }
 

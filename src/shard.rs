@@ -41,7 +41,7 @@ impl Rsm for Shard {
         todo!()
     }
 
-    fn write(&mut self, req: ShardWriteReq) -> ShardWriteRes {
+    fn write(&mut self, req: &ShardWriteReq) -> ShardWriteRes {
         todo!()
     }
 

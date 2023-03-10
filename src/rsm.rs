@@ -27,7 +27,7 @@ pub trait Rsm: Sized + Serialize + for<'a> Deserialize<'a> {
     type WriteRes: fmt::Debug + Serialize + for<'a> Deserialize<'a>;
 
     fn read(&self, request: Self::ReadReq) -> Self::ReadRes;
-    fn write(&mut self, request: Self::WriteReq) -> Self::WriteRes;
+    fn write(&mut self, request: &Self::WriteReq) -> Self::WriteRes;
     fn recover<P: AsRef<Path>>(path: P) -> io::Result<Self>;
     fn wrap(msg: RsmMessage<Self>) -> Message;
     fn unwrap(msg: Message) -> Result<RsmMessage<Self>, Message>;
@@ -43,21 +43,38 @@ pub struct RsmClient<R: Rsm> {
 }
 
 impl<R: Rsm> RsmClient<R> {
-    async fn read(&mut self, req: R::ReadReq) -> io::Result<RsmResult<R::ReadRes>> {
-        todo!()
+    async fn read(&mut self, req: R::ReadReq) -> io::Result<R::ReadRes> {
+        let wrapped = R::wrap(RsmMessage::ReadReq(req));
+
+        loop {
+            let fut = self.io.request(self.leader, wrapped.clone());
+            let res: Envelope = fut.await?;
+            let unwrapped = R::unwrap(res.message).unwrap();
+
+            match unwrapped {
+                RsmMessage::Redirect { leader, term } => self.leader = leader,
+                RsmMessage::ReadRes(res) => return Ok(res),
+                _ => unreachable!(),
+            }
+        }
     }
 
-    async fn write(&mut self, req: R::WriteReq) -> io::Result<RsmResult<R::WriteRes>> {
-        todo!()
+    async fn write(&mut self, req: R::WriteReq) -> io::Result<R::WriteRes> {
+        let wrapped = R::wrap(RsmMessage::WriteReq(req));
+
+        loop {
+            let fut = self.io.request(self.leader, wrapped.clone());
+            let res: Envelope = fut.await?;
+            let unwrapped = R::unwrap(res.message).unwrap();
+
+            match unwrapped {
+                RsmMessage::Redirect { leader, term } => self.leader = leader,
+                RsmMessage::WriteRes(res) => return Ok(res),
+                _ => unreachable!(),
+            }
+        }
     }
 }
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Redirect {
-    leader: Address,
-}
-
-pub type RsmResult<R> = Result<R, Redirect>;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Term(pub u64);
@@ -104,7 +121,6 @@ pub struct AppendReq<Req> {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AppendRes {
-    success: bool,
     term: Term,
     last_log_term: Option<Term>,
     // a small optimization over the raft paper, tells
@@ -125,6 +141,7 @@ enum Role {
     Leader {
         term: Term,
         broadcast_indices: HashMap<Address, u64>,
+        confirmed_log_lengths: HashMap<Address, u64>,
     },
     Follower {
         leader: Address,
@@ -165,6 +182,7 @@ impl<R: Rsm> Replica<R> {
             Role::Leader {
                 term,
                 broadcast_indices,
+                ..
             } => {
                 // TODO handle timeouts
 
@@ -183,6 +201,8 @@ impl<R: Rsm> Replica<R> {
                             None
                         },
                     });
+
+                    *idx = self.log.len() as u64;
 
                     self.io.send(*peer, None, R::wrap(req));
                 }
@@ -315,13 +335,67 @@ impl<R: Rsm> Replica<R> {
         }
     }
 
-    fn handle_append_req(&mut self, from: Address, req: AppendReq<R::WriteReq>) {
+    fn handle_append_req(&mut self, from: Address, mut req: AppendReq<R::WriteReq>) {
+        let now = self.io.now();
+        let expiration_ms = self.io.rand(150, 300);
+
         // if we don't follow them, possibly start doing so
-        todo!()
+        if self.term() < req.term {
+            self.role = Role::Follower {
+                leader: from,
+                term: req.term,
+                leader_timeout: now + Duration::from_millis(expiration_ms),
+            };
+        }
+
+        if let Role::Follower {
+            leader,
+            term,
+            leader_timeout,
+        } = &mut self.role
+        {
+            if req.term != *term || *leader != from {
+                return;
+            }
+
+            if req.batch_start_log_index != self.log.len() as u64 {
+                let res = R::wrap(RsmMessage::AppendRes(AppendRes {
+                    log_size: self.log.len() as u64,
+                    term: *term,
+                    last_log_term: self.log.last().map(|(t, w)| *t),
+                }));
+
+                self.io.send(from, None, res);
+                return;
+            }
+
+            self.log.append(&mut req.entries);
+
+            while self.committed_log_size < req.leader_committed_log_size {
+                let entry_to_apply: &R::WriteReq = &self.log[self.committed_log_size as usize].1;
+                self.state.write(entry_to_apply);
+                self.committed_log_size += 1;
+            }
+        }
     }
 
-    fn handle_append_res(&mut self, from: Address, req: AppendRes) {
-        todo!()
+    fn handle_append_res(&mut self, from: Address, res: AppendRes) {
+        if let Role::Leader {
+            broadcast_indices,
+            confirmed_log_lengths,
+            ..
+        } = &mut self.role
+        {
+            if let Some(peer_index) = broadcast_indices.get_mut(&from) {
+                *peer_index = (*peer_index).max(res.log_size);
+
+                let confirmed_log_length = *confirmed_log_lengths.get(&from).unwrap();
+                confirmed_log_lengths.insert(from, confirmed_log_length.max(res.log_size));
+            } else {
+                broadcast_indices.insert(from, res.log_size);
+                confirmed_log_lengths.insert(from, res.log_size);
+            }
+        }
     }
 
     fn handle_vote_req(
@@ -390,11 +464,19 @@ impl<R: Rsm> Replica<R> {
             successes.insert(from, committed_log_size);
 
             if successes.len() >= outstanding_votes.len() {
+                for havent_heard_back in &*outstanding_votes {
+                    successes.insert(*havent_heard_back, 0);
+                }
+
                 self.role = Role::Leader {
                     term: *term,
+                    confirmed_log_lengths: successes.clone(),
                     broadcast_indices: std::mem::take(successes),
                 };
             }
         }
+
+        // TODO handle late responses by bumping up the broadcast index and confirmed length if
+        // we're a Leader already and the Term matches
     }
 }
