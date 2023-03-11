@@ -9,24 +9,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-#![allow(unused)]
+use serde::{Deserialize, Serialize};
 
-mod common;
-mod coordinator;
-pub mod io;
-mod machine_manager;
-mod metadata;
-pub mod rsm;
-pub mod serialization;
-mod shard;
-pub mod simulator;
-pub mod varint;
-
-pub use common::*;
-pub use coordinator::*;
-use io::*;
-use metadata::*;
-pub use rsm::*;
-pub use shard::*;
-
-pub use machine_manager::MachineManager;
+#[derive(Serialize, Deserialize)]
+pub struct Basic {
+    pub a: u64,
+    pub b: u64,
+}
