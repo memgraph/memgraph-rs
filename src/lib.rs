@@ -16,16 +16,16 @@ mod coordinator;
 pub mod io;
 mod machine_manager;
 mod metadata;
-mod rsm;
+pub mod rsm;
 pub mod serialization;
 mod shard;
-
-// #[cfg(feature = "simulator")]
 pub mod simulator;
 
 pub use common::*;
-use coordinator::*;
+pub use coordinator::*;
 use io::*;
 use metadata::*;
 pub use rsm::*;
-use shard::*;
+pub use shard::*;
+
+pub use machine_manager::MachineManager;

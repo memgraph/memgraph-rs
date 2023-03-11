@@ -17,10 +17,17 @@ use serde::{Deserialize, Serialize};
 use crate::*;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ShardReadReq {}
+pub enum ShardReadReq {
+    ScanAll,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ShardReadRes {}
+pub struct ScanAll;
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ShardReadRes {
+    ScanAll(ScanAll),
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ShardWriteReq {}
@@ -28,7 +35,7 @@ pub enum ShardWriteReq {}
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ShardWriteRes {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Shard {}
 
 impl Rsm for Shard {
@@ -38,14 +45,24 @@ impl Rsm for Shard {
     type WriteRes = ShardWriteRes;
 
     fn read(&self, req: ShardReadReq) -> ShardReadRes {
+        match req {
+            ShardReadReq::ScanAll => ShardReadRes::ScanAll(ScanAll),
+        }
+    }
+
+    fn write(&mut self, req: &ShardWriteReq) -> ShardWriteRes {
         todo!()
     }
 
-    fn write(&mut self, req: ShardWriteReq) -> ShardWriteRes {
-        todo!()
+    fn wrap(msg: RsmMessage<Shard>) -> Message {
+        Message::Shard(msg)
     }
 
-    fn recover<P: AsRef<Path>>(path: P) -> io::Result<Shard> {
-        todo!()
+    fn unwrap(msg: Message) -> Result<RsmMessage<Shard>, Message> {
+        if let Message::Shard(wrapped) = msg {
+            Ok(wrapped)
+        } else {
+            Err(msg)
+        }
     }
 }

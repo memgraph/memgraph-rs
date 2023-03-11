@@ -1,3 +1,14 @@
+// Copyright 2023 Memgraph Ltd.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt; by using this file, you agree to be bound by the terms of the Business Source
+// License, and you may not use this file except in compliance with the Business Source License.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 use std::future::Future;
 use std::io;
 use std::pin::Pin;
@@ -82,6 +93,8 @@ pub trait Handle: std::fmt::Debug + Send + Sync {
     fn now(&self) -> SystemTime;
 
     fn timer(&self, duration: Duration) -> TimerFuture;
+
+    fn rand(&self, low: u64, high: u64) -> u64;
 }
 
 #[derive(Debug, Clone)]
@@ -108,6 +121,10 @@ impl Io {
 
     pub fn should_shutdown(&self) -> bool {
         self.handle.should_shutdown()
+    }
+
+    pub fn rand(&self, low: u64, high: u64) -> u64 {
+        self.handle.rand(low, high)
     }
 
     pub fn now(&self) -> SystemTime {

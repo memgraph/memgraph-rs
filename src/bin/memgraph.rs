@@ -9,6 +9,27 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+use std::net::{IpAddr, Ipv4Addr};
+use std::sync::Arc;
+
+use memgraph::*;
+
 fn main() {
-    println!("Hello, world!");
+    let handle: Arc<dyn memgraph::io::Handle> = Arc::new(memgraph::simulator::Simulator::default());
+
+    let srv_address = Address {
+        id: 1,
+        port: 1,
+        ip_addr: IpAddr::V4(Ipv4Addr::LOCALHOST),
+    };
+
+    let srv_io = memgraph::io::Io {
+        address: srv_address,
+        timeout: std::time::Duration::from_millis(100),
+        handle: handle.clone(),
+    };
+
+    let mut mm = MachineManager::recover("test_mm_1", srv_io).unwrap();
+
+    mm.run();
 }
