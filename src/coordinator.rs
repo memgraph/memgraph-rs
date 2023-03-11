@@ -16,6 +16,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::*;
 
+// TODO(gitbuda): Remove, just to make project compile.
+#[derive(Serialize, Deserialize, Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ShardMap {
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CoordinatorReadReq {
     GetShardMap,

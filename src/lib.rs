@@ -20,6 +20,7 @@ pub mod rsm;
 pub mod serialization;
 mod shard;
 pub mod simulator;
+pub mod varint;
 
 pub use common::*;
 pub use coordinator::*;
